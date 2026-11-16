@@ -1,0 +1,42 @@
+name: ai-support-agent
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Copy .env.example to .env first}
+    volumes:
+      - support-data:/var/lib/postgresql
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d app"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        VITE_API_URL: ""
+    ports:
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/app
+      SMTP_HOST: ""
+      FASTAPI_ENV: ""
+    command:
+      - bash
+      - -ec
+      - alembic upgrade head && python -m app.initial_data && exec fastapi run app/main.py --host 0.0.0.0
+    healthcheck:
+      test: [CMD, curl, "-f", "http://localhost:8000/api/v1/utils/health-check/"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+volumes:
+  support-data:
+
